@@ -26,10 +26,7 @@ func validateAndWeighShare(primary *bitcoin.BitcoinBlock, aux1 *bitcoin.AuxBlock
     }
 
     primarySum, err := primary.Sum()
-    if err != nil {
-        log.Printf("Primary Sum failed: %v", err)
-        return shareInvalid, 0
-    }
+    logOnError(err) // Use existing logOnError from server.go
     if primarySum == nil {
         log.Printf("Nil primarySum")
         return shareInvalid, 0
@@ -82,11 +79,4 @@ func validateAndWeighShare(primary *bitcoin.BitcoinBlock, aux1 *bitcoin.AuxBlock
     }
 
     return shareInvalid, shareDifficulty
-}
-
-// Assuming logOnError exists elsewhere; if not, define it
-func logOnError(err error) {
-    if err != nil {
-        log.Println(err)
-    }
 }
