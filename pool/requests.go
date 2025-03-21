@@ -2,7 +2,7 @@ package pool
 
 import (
     "encoding/json"
-    "log" // Ensure log is imported
+
 
     "designs.capital/dogepool/bitcoin"
 )

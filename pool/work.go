@@ -255,4 +255,28 @@ func (pool *PoolServer) generateWorkFromCache(clean bool) (bitcoin.Work, error) 
 
     pool.workCache = work
     return work, nil
-}
+	func (pool *PoolServer) generateWorkFromCache(clean bool) (bitcoin.Work, error) {
+		primaryName := pool.config.BlockChainOrder[0]
+	
+		// Fetch template and aux blocks
+		template, auxBlocks, err := pool.fetchAllBlockTemplatesFromRPC()
+		if err != nil {
+			return nil, err
+		}
+	
+		// Generate work
+		_, work, err := bitcoin.GenerateWork(
+			template, // Already *bitcoin.Template
+			auxBlocks,
+			primaryName,
+			"", // arbitrary
+			"", // rewardPubScriptKey (adjust if available)
+			0,  // extranonceByteReservationLength
+		)
+		if err != nil {
+			return nil, err
+		}
+	
+		pool.workCache = work
+		return work, nil
+	}

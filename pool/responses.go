@@ -239,7 +239,7 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
     }
 
     block, _, err := bitcoin.GenerateWork(
-        template,
+        template, // Already *bitcoin.Template
         auxBlocks,
         pool.config.BlockChainOrder[0],
         extranonce2,
@@ -269,7 +269,7 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
     }
 
     primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
-    _, err = primaryChain.RPC.SubmitBlock(header) // Assume string input
+    _, err = primaryChain.RPC.SubmitBlock(header) // Use string directly
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
     }
