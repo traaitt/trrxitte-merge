@@ -5,7 +5,6 @@ import (
     "errors"
     "fmt"
     "math/big"
-    "strings"
 )
 
 type BlockGenerator interface {
