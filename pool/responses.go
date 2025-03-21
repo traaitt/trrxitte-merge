@@ -104,80 +104,83 @@ func miningSubscribe(request *stratumRequest, client *stratumClient) (stratumRes
 }
 
 func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolServer) (any, error) {
-	var reply stratumRequest
+    var reply stratumRequest
 
-	if isBanned(client.ip) {
-		return reply, errors.New("banned client attempted to access: " + client.ip)
-	}
+    if isBanned(client.ip) {
+        return reply, errors.New("banned client attempted to access: " + client.ip)
+    }
 
-	var params []string
-	err := json.Unmarshal(request.Params, &params)
-	if err != nil {
-		return reply, err
-	}
-	if len(params) < 1 {
-		return reply, errors.New("invalid parameters")
-	}
+    var params []string
+    err := json.Unmarshal(request.Params, &params)
+    if err != nil {
+        return reply, err
+    }
+    if len(params) < 1 {
+        return reply, errors.New("invalid parameters")
+    }
 
-	authResponse := stratumResponse{
-		Result: interface{}(false),
-		Id:     request.Id,
-	}
+    authResponse := stratumResponse{
+        Result: interface{}(false),
+        Id:     request.Id,
+    }
 
-	loginString := params[0]
-	loginParts := strings.Split(loginString, ".")
-	minerAddressesString := loginParts[0]
-	// minerAddressString format: primarycoinAddress-auxcoinAddress-auxcoinAddress.rigID
-	minerAddresses := strings.Split(minerAddressesString, "-")
-	if len(minerAddresses) != len(pool.config.BlockChainOrder) {
-		return authResponse, errors.New("not enough miner addresses to login")
-	}
+    loginString := params[0]
+    loginParts := strings.Split(loginString, ".")
+    if len(loginParts) != 2 {
+        return authResponse, errors.New("invalid login format: missing rigID")
+    }
 
-	rigID := loginParts[1]
+    minerAddressesString := loginParts[0]
+    minerAddresses := strings.Split(minerAddressesString, "-")
+    if len(minerAddresses) != len(pool.config.BlockChainOrder) {
+        return authResponse, errors.New("not enough miner addresses to login: expected " + fmt.Sprint(len(pool.config.BlockChainOrder)))
+    }
 
-	// The config has the primarycoinAddress-auxcoinAddress-auxcoinAddress order we need
-	blockchainIndex := 0
-	for _, blockChainName := range pool.config.BlockChainOrder {
-		blockChain := bitcoin.GetChain(blockChainName)
-		inputBlockChainAddress := minerAddresses[blockchainIndex]
+    rigID := loginParts[1]
 
-		network := pool.activeNodes[blockChainName].Network
-		if (network == "test" && !blockChain.ValidTestnetAddress(inputBlockChainAddress)) ||
-			(network == "main" && !blockChain.ValidMainnetAddress(inputBlockChainAddress)) {
-			m := "invalid %v %vnet miner address from %v: %v"
-			m = fmt.Sprintf(m, blockChainName, network, client.ip, inputBlockChainAddress)
-			return authResponse, errors.New(m)
-		}
+    // Validate each address against its blockchain
+    blockchainIndex := 0
+    for _, blockChainName := range pool.config.BlockChainOrder {
+        blockChain := bitcoin.GetChain(blockChainName)
+        inputBlockChainAddress := minerAddresses[blockchainIndex]
 
-		blockchainIndex++
-	}
+        network := pool.activeNodes[blockChainName].Network
+        if (network == "test" && !blockChain.ValidTestnetAddress(inputBlockChainAddress)) ||
+            (network == "main" && !blockChain.ValidMainnetAddress(inputBlockChainAddress)) {
+            m := "invalid %v %vnet miner address from %v: %v"
+            m = fmt.Sprintf(m, blockChainName, network, client.ip, inputBlockChainAddress)
+            return authResponse, errors.New(m)
+        }
 
-	log.Printf("Authorized rig: %v mining to addresses: %v", rigID, minerAddresses)
+        blockchainIndex++
+    }
 
-	client.login = loginString
+    log.Printf("Authorized rig: %v mining to addresses: %v", rigID, minerAddresses)
 
-	addSession(client)
+    client.login = loginString
+    addSession(client)
 
-	authResponse.Result = interface{}(true)
+    authResponse.Result = interface{}(true)
 
-	err = sendPacket(authResponse, client) // Mining.Auth replies with three packets (1)
-	if err != nil {
-		return reply, err
-	}
+    // Send three packets as part of authorization
+    err = sendPacket(authResponse, client) // 1. Authorization response
+    if err != nil {
+        return reply, err
+    }
 
-	err = sendPacket(miningSetDifficulty(pool.config.PoolDifficulty), client) // Mining.Auth replies with three packets (2)
-	if err != nil {
-		return reply, err
-	}
+    err = sendPacket(miningSetDifficulty(pool.config.PoolDifficulty), client) // 2. Set difficulty
+    if err != nil {
+        return reply, err
+    }
 
-	work, err := pool.generateWorkFromCache(false)
-	if err != nil {
-		return reply, err
-	}
+    work, err := pool.generateWorkFromCache(false)
+    if err != nil {
+        return reply, err
+    }
 
-	reply = miningNotify(work) // Mining.Auth replies with three packets (3)
+    reply = miningNotify(work) // 3. Initial work notification
 
-	return reply, nil
+    return reply, nil
 }
 
 func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (stratumResponse, error) {

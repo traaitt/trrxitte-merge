@@ -18,23 +18,15 @@ type stratumRequest struct {
 }
 
 func miningNotify(work bitcoin.Work) stratumRequest {
-	var request stratumRequest
+    var request stratumRequest
 
-	params, err := json.Marshal(work)
-	logOnError(err)
+    params, err := json.Marshal(work)
+    logOnError(err)
 
-	request.Method = "mining.notify"
-	request.Params = params
+    request.Method = "mining.notify"
+    request.Params = params
 
-	return request
-}
-
-func miningSetExtranonce(extranonce string) stratumRequest {
-	var request stratumRequest
-
-	// TODO build request; I need a better example
-
-	return request
+    return request
 }
 
 func miningSetDifficulty(difficulty float64) stratumRequest {
