@@ -203,15 +203,67 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
     var work bitcoin.Work
     err := json.Unmarshal(request.Params, &work)
     if err != nil {
-        return response, err
+        return response, fmt.Errorf("failed to parse submit params: %v", err)
     }
 
     err = pool.recieveWorkFromClient(work, client)
     if err != nil {
-        log.Println(err)
-        // Still return true unless it's a critical error (Stratum spec allows this)
+        log.Printf("Work submission error from %v: %v", client.ip, err)
+        // Return true unless it's a critical error (per Stratum spec)
+        if strings.Contains(err.Error(), "invalid share") {
+            return response, nil // Invalid share but not a protocol error
+        }
+        return response, err
     }
 
     response.Result = interface{}(true)
     return response, nil
+}
+
+func (pool *PoolServer) recieveWorkFromClient(work bitcoin.Work, client *stratumClient) error {
+    // Generate block header from submitted work
+    block, _, err := bitcoin.GenerateWork(pool.cachedTemplate, pool.cachedAuxBlocks, pool.config.BlockChainOrder[0], "", pool.config.PoolPayoutPubScriptKey, 0)
+    if err != nil {
+        return fmt.Errorf("failed to regenerate work: %v", err)
+    }
+
+    header, err := block.MakeHeader(work.Extranonce, work.Nonce, work.NTime)
+    if err != nil {
+        return fmt.Errorf("failed to make header: %v", err)
+    }
+
+    // Validate share against pool difficulty
+    hashInt, err := block.Sum()
+    if err != nil {
+        return fmt.Errorf("failed to hash header: %v", err)
+    }
+
+    targetInt := big.NewInt(0).SetFloat64(pool.config.PoolDifficulty)
+    if hashInt.Cmp(targetInt) > 0 {
+        return errors.New("invalid share: below pool difficulty")
+    }
+
+    // Submit to primary chain (Dogecoin)
+    primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
+    _, err = primaryChain.RPC.SubmitBlock(header)
+    if err != nil {
+        log.Printf("Primary chain submission failed: %v", err)
+    }
+
+    // Submit auxpow to auxiliary chains
+    for _, chainName := range pool.config.BlockChainOrder[1:] {
+        auxData, ok := work.AuxData[chainName]
+        if !ok || auxData.Target == "" {
+            log.Printf("Missing aux data for %v", chainName)
+            continue
+        }
+
+        auxChain := pool.activeNodes[chainName]
+        _, err = auxChain.RPC.SubmitAuxBlock(auxData.Hash, header)
+        if err != nil {
+            log.Printf("Aux chain %v submission failed: %v", chainName, err)
+        }
+    }
+
+    return nil
 }
