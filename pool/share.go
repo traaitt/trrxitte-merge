@@ -26,7 +26,7 @@ func validateAndWeighShare(primary *bitcoin.BitcoinBlock, aux1 *bitcoin.AuxBlock
     }
 
     primarySum, err := primary.Sum()
-    logOnError(err) // Use existing logOnError from server.go
+    logOnError(err)
     if primarySum == nil {
         log.Printf("Nil primarySum")
         return shareInvalid, 0
@@ -45,27 +45,33 @@ func validateAndWeighShare(primary *bitcoin.BitcoinBlock, aux1 *bitcoin.AuxBlock
     status := shareInvalid
 
     if primarySum.Cmp(primaryTargetBig) <= 0 {
+        log.Printf("Primary share is a block candidate")
         status = primaryCandidate
     }
 
     if aux1 != nil && aux1.Hash != "" {
+        log.Printf("Processing aux chain: Hash=%s, Target=%s", aux1.Hash, aux1.Target)
         auxTarget := bitcoin.Target(reverseHexBytes(aux1.Target))
         auxTargetBig, ok := auxTarget.ToBig()
         if !ok || auxTargetBig == nil {
-            log.Printf("Invalid aux target: %s", aux1.Target)
-            return status, shareDifficulty // Return current status, don’t crash
+            log.Printf("Invalid aux target: %s (reversed: %s)", aux1.Target, reverseHexBytes(aux1.Target))
+            return status, shareDifficulty
         }
 
-        if primarySum.Cmp(auxTargetBig) <= 0 { // Line 41: Now safe
+        if primarySum.Cmp(auxTargetBig) <= 0 {
+            log.Printf("Aux share is a block candidate")
             if status == primaryCandidate {
                 status = dualCandidate
             } else {
                 status = aux1Candidate
             }
         }
+    } else {
+        log.Printf("No aux chain data: aux1=%v", aux1)
     }
 
     if status > shareInvalid {
+        log.Printf("Valid share or candidate: status=%d", status)
         return status, shareDifficulty
     }
 
@@ -75,8 +81,10 @@ func validateAndWeighShare(primary *bitcoin.BitcoinBlock, aux1 *bitcoin.AuxBlock
         return shareInvalid, shareDifficulty
     }
     if primarySum.Cmp(poolTargetBig) <= 0 {
+        log.Printf("Share meets pool difficulty")
         return shareValid, shareDifficulty
     }
 
+    log.Printf("Share invalid: primarySum=%s, poolTarget=%s", primarySum.Text(16), poolTargetBig.Text(16))
     return shareInvalid, shareDifficulty
 }
