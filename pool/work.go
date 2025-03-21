@@ -61,7 +61,7 @@ func (p *PoolServer) fetchRpcBlockTemplatesAndCacheWork() error {
 }
 
 // Main OUTPUT
-func (p *PoolServer) recieveWorkFromClient(share bitcoin.Work, client *stratumClient) error {
+func (p *PoolServer) receiveWorkFromClient(share bitcoin.Work, client *stratumClient) error {
     primaryBlockTemplate := p.templates.GetPrimary()
     if primaryBlockTemplate.Template == nil {
         return errors.New("primary block template not yet set")
@@ -227,27 +227,38 @@ func (p *PoolServer) recieveWorkFromClient(share bitcoin.Work, client *stratumCl
     return nil
 }
 
+// Generate work from cache
+func (p *PoolServer) generateWorkFromCache(force bool) ([]string, error) {
+    if force || len(p.workCache) == 0 {
+        primaryName := p.config.BlockChainOrder[0] // Moved from line 231
 
-    primaryName := pool.config.BlockChainOrder[0]
+        // Fetch template and aux blocks
+        template, auxBlocks, err := p.fetchAllBlockTemplatesFromRPC()
+        if err != nil {
+            return nil, err
+        }
 
-    // Fetch template and aux blocks
-    template, auxBlocks, err := pool.fetchAllBlockTemplatesFromRPC()
-    if err != nil {
-        return nil, err
+        // Generate work
+        _, work, err := bitcoin.GenerateWork(
+            template,
+            auxBlocks,
+            primaryName,
+            "", // arbitrary
+            "", // rewardPubScriptKey (adjust if available)
+            0,  // extranonceByteReservationLength
+        )
+        if err != nil {
+            return nil, err
+        }
+
+        p.workCache = work
+        return work, nil
     }
+    return p.workCache, nil
+}
 
-    // Generate work
-    _, work, err := bitcoin.GenerateWork(
-        template,
-        auxBlocks,
-        primaryName,
-        "", // arbitrary
-        "", // rewardPubScriptKey (adjust if available)
-        0,  // extranonceByteReservationLength
-    )
-    if err != nil {
-        return nil, err
-    }
-
-    pool.workCache = work
-    return work, nil
+// Helper function (assuming it’s defined elsewhere or needs to be added)
+func hexStringToByteString(hexStr string) string {
+    // Placeholder; implement as needed
+    return hexStr
+}
