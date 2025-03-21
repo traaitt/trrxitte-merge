@@ -238,9 +238,14 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
 
     // Regenerate block
     primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
+    template, err := primaryChain.RPC.GetBlockTemplate() // Use RPC
+    if err != nil {
+        return fmt.Errorf("failed to get block template: %v", err)
+    }
+
     block, _, err := bitcoin.GenerateWork(
-        primaryChain.GetTemplate(), // Assume this exists
-        map[string]*bitcoin.AuxBlock{},
+        template,
+        map[string]*bitcoin.AuxBlock{}, // Placeholder; fetch real aux data if needed
         pool.config.BlockChainOrder[0],
         extranonce2,
         "", // Placeholder for payout key
@@ -263,14 +268,14 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
 
     targetInt := new(big.Int).Mul(
         big.NewInt(int64(pool.config.PoolDifficulty)),
-        big.NewInt(0x100000000), // Rough scaling; adjust as needed
+        big.NewInt(0x100000000), // Rough scaling
     )
     if hashInt.Cmp(targetInt) > 0 {
         return errors.New("invalid share: below pool difficulty")
     }
 
     // Submit to primary chain
-    _, err = primaryChain.RPC.SubmitBlock(header)
+    _, err = primaryChain.RPC.SubmitBlock(header) // Assume string input; adjust if needed
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
     }
