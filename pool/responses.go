@@ -189,6 +189,7 @@ func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (
     return response, nil
 }
 
+
 func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServer) (stratumResponse, error) {
     response := stratumResponse{
         Result: interface{}(false),
@@ -201,7 +202,7 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
         return response, fmt.Errorf("failed to parse submit params: %v", err)
     }
 
-    err = pool.recieveWorkFromClient(work, client)
+    err = pool.receiveWorkFromClient(work, client) // Correct spelling
     if err != nil {
         log.Printf("Work submission error from %v: %v", client.ip, err)
         if strings.Contains(err.Error(), "invalid share") {
