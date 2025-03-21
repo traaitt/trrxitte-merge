@@ -184,11 +184,14 @@ func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolS
 }
 
 func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (stratumResponse, error) {
-	var response stratumResponse
+    response := stratumResponse{
+        Id:     request.Id,
+        Result: interface{}(true), // Accept extranonce subscription
+    }
 
-	// TODO - I need to find a good example for this one
-
-	return response, nil
+    // No additional action needed unless pool dynamically adjusts extranonce
+    log.Println("Client subscribed to extranonce updates: " + client.ip)
+    return response, nil
 }
 
 func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServer) (stratumResponse, error) {
