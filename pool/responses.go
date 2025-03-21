@@ -215,13 +215,11 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
 }
 
 func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *stratumClient) error {
-    // Fetch current work
     currentWork, err := pool.generateWorkFromCache(false)
     if err != nil {
         return fmt.Errorf("failed to fetch work template: %v", err)
     }
 
-    // Parse submitted work (Stratum: [worker, jobID, extranonce2, ntime, nonce])
     if len(submittedWork) < 5 {
         return errors.New("invalid work submission: too few parameters")
     }
@@ -231,21 +229,18 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
     ntime := submittedWork[3]
     nonce := submittedWork[4]
 
-    // Validate jobID
     if jobID != currentWork[0] {
         return errors.New("invalid share: stale job")
     }
 
-    // Regenerate block
-    primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
-    template, err := primaryChain.RPC.GetBlockTemplate() // Use RPC
+    template, auxBlocks, err := pool.fetchAllBlockTemplatesFromRPC()
     if err != nil {
         return fmt.Errorf("failed to get block template: %v", err)
     }
 
     block, _, err := bitcoin.GenerateWork(
         template,
-        map[string]*bitcoin.AuxBlock{}, // Placeholder; fetch real aux data if needed
+        auxBlocks,
         pool.config.BlockChainOrder[0],
         extranonce2,
         "", // Placeholder for payout key
@@ -260,7 +255,6 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
         return fmt.Errorf("failed to make header: %v", err)
     }
 
-    // Validate share
     hashInt, err := block.Sum()
     if err != nil {
         return fmt.Errorf("failed to hash header: %v", err)
@@ -274,13 +268,12 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
         return errors.New("invalid share: below pool difficulty")
     }
 
-    // Submit to primary chain
-    _, err = primaryChain.RPC.SubmitBlock(header) // Assume string input; adjust if needed
+    primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
+    _, err = primaryChain.RPC.SubmitBlock(header) // Assume string input
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
     }
 
-    // Submit to aux chains
     for _, chainName := range pool.config.BlockChainOrder[1:] {
         if len(currentWork) > 8 {
             for _, auxEntry := range currentWork[8:] {
