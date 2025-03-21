@@ -17,10 +17,9 @@ type BlockGenerator interface {
 
 var jobCounter int
 
-// GenerateWork using []string as Work
-func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName, arbitrary, poolPayoutPubScriptKey string, reservedArbitraryByteLength int) (*BitcoinBlock, []string, error) {
+func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName, arbitrary, poolPayoutPubScriptKey string, reservedArbitraryByteLength int) (*BitcoinBlock, Work, error) {
     if template == nil {
-        return nil, []string{}, errors.New("template cannot be null")
+        return nil, Work{}, errors.New("template cannot be null")
     }
 
     var err error
@@ -30,7 +29,7 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
 
     block.reversePrevBlockHash, err = reverseHex4Bytes(block.Template.PrevBlockHash)
     if err != nil {
-        return nil, []string{}, fmt.Errorf("invalid previous block hash hex: %v", err)
+        return nil, Work{}, fmt.Errorf("invalid previous block hash hex: %v", err)
     }
 
     arbitraryBytes := bytesWithLengthHeader([]byte(arbitrary))
@@ -41,21 +40,22 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
     block.coinbaseFinal = arbitraryHex + block.Template.CoinbaseFinal(poolPayoutPubScriptKey).Serialize()
     block.merkleSteps, err = block.Template.MerkleSteps()
     if err != nil {
-        return nil, []string{}, fmt.Errorf("failed to generate merkle steps: %v", err)
+        return nil, Work{}, fmt.Errorf("failed to generate merkle steps: %v", err)
     }
 
-    // Assuming Work is a []string
-    work := make([]string, 8)
-    work[0] = fmt.Sprintf("%08x", jobCounter) // Job ID
-    work[1] = block.reversePrevBlockHash
-    work[2] = block.coinbaseInitial
-    work[3] = block.coinbaseFinal
-    work[4] = strings.Join(block.merkleSteps, ",") // Convert []string to single string
-    work[5] = fmt.Sprintf("%08x", block.Template.Version)
-    work[6] = block.Template.Bits
-    work[7] = fmt.Sprintf("%x", block.Template.CurrentTime)
+    // Work as []any for Stratum compatibility
+    work := Work{
+        fmt.Sprintf("%08x", jobCounter), // Job ID (string)
+        block.reversePrevBlockHash,      // PrevHash (string)
+        block.coinbaseInitial,           // Coinb1 (string)
+        block.coinbaseFinal,             // Coinb2 (string)
+        block.merkleSteps,               // MerkleBranch ([]string)
+        fmt.Sprintf("%08x", block.Template.Version), // Version (string)
+        block.Template.Bits,             // NBits (string)
+        fmt.Sprintf("%x", block.Template.CurrentTime), // NTime (string)
+    }
 
-    // Append auxpow data as additional strings
+    // Append auxpow data
     for chainName, auxBlock := range auxBlocks {
         if auxBlock != nil {
             auxData := fmt.Sprintf("%s:%s", chainName, auxBlock.Hash)
@@ -67,7 +67,7 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
     return &block, work, nil
 }
 
-// MakeHeader (unchanged except for nonceTime inclusion)
+// MakeHeader (unchanged except for nonceTime)
 func (b *BitcoinBlock) MakeHeader(extranonce, nonce, nonceTime string) (string, error) {
     if b.Template == nil {
         return "", errors.New("generate work first")
@@ -99,6 +99,8 @@ func (b *BitcoinBlock) MakeHeader(extranonce, nonce, nonceTime string) (string, 
 
     return b.header, nil
 }
+
+// Remaining functions unchanged (omitted for brevity)
 
 // Remaining functions (unchanged)
 func (b *BitcoinBlock) HeaderHashed() (string, error) {

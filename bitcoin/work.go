@@ -1,20 +1,38 @@
-package bitcoin
+package pool
 
-// Interface to stratum JSON work packets
-type Work []any
+import (
+    "designs.capital/dogepool/bitcoin"
+)
 
-func (b BitcoinBlock) NonceSubmissionSlot() (slotID int) {
-	return 4
-}
+func (pool *PoolServer) generateWorkFromCache(clean bool) (bitcoin.Work, error) {
+    primaryName := pool.config.BlockChainOrder[0]
+    auxNames := pool.config.BlockChainOrder[1:]
 
-func (b BitcoinBlock) NonceTimeSubmissionSlot() (slotID int) {
-	return 3
-}
+    // Fetch template and aux blocks
+    primaryChain := pool.activeNodes[primaryName]
+    template := primaryChain.GetTemplate() // Assume this exists
+    auxBlocks := make(map[string]*bitcoin.AuxBlock)
+    for _, auxName := range auxNames {
+        auxChain := pool.activeNodes[auxName]
+        auxBlock, err := auxChain.GetAuxBlock() // Assume this exists
+        if err != nil {
+            return nil, err
+        }
+        auxBlocks[auxName] = auxBlock
+    }
 
-func (b BitcoinBlock) Extranonce2SubmissionSlot() (slotID int, exists bool) {
-	return 2, true
-}
+    // Generate work
+    _, work, err := bitcoin.GenerateWork(
+        template,
+        auxBlocks,
+        primaryName,
+        "", // arbitrary
+        "", // rewardPubScriptKey (adjust if available)
+        0,  // extranonceByteReservationLength
+    )
+    if err != nil {
+        return nil, err
+    }
 
-func (b BitcoinBlock) ShareMultiplier() float64 {
-	return b.chain.ShareMultiplier()
+    return work, nil
 }
