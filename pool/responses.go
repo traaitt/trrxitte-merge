@@ -192,23 +192,23 @@ func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (
 }
 
 func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServer) (stratumResponse, error) {
-	response := stratumResponse{
-		Result: interface{}(false),
-		Id:     request.Id,
-	}
+    response := stratumResponse{
+        Result: interface{}(false),
+        Id:     request.Id,
+    }
 
-	var work bitcoin.Work
-	err := json.Unmarshal(request.Params, &work)
-	if err != nil {
-		return response, err
-	}
+    var work bitcoin.Work
+    err := json.Unmarshal(request.Params, &work)
+    if err != nil {
+        return response, err
+    }
 
-	err = pool.recieveWorkFromClient(work, client)
-	if err != nil {
-		log.Println(err)
-	}
+    err = pool.recieveWorkFromClient(work, client)
+    if err != nil {
+        log.Println(err)
+        // Still return true unless it's a critical error (Stratum spec allows this)
+    }
 
-	response.Result = interface{}(true)
-
-	return response, nil
+    response.Result = interface{}(true)
+    return response, nil
 }
