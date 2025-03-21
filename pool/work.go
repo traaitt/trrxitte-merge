@@ -227,7 +227,7 @@ func (p *PoolServer) recieveWorkFromClient(share bitcoin.Work, client *stratumCl
     return nil
 }
 
-func (pool *PoolServer) generateWorkFromCache(clean bool) (bitcoin.Work, error) {
+
     primaryName := pool.config.BlockChainOrder[0]
 
     // Fetch template and aux blocks
@@ -251,4 +251,3 @@ func (pool *PoolServer) generateWorkFromCache(clean bool) (bitcoin.Work, error) 
 
     pool.workCache = work
     return work, nil
-}

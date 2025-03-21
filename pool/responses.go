@@ -190,19 +190,20 @@ func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (
 }
 
 
+
 func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServer) (stratumResponse, error) {
     response := stratumResponse{
         Result: interface{}(false),
         Id:     request.Id,
     }
 
-    var work []string // Stratum submit params are strings
+    var work []string
     err := json.Unmarshal(request.Params, &work)
     if err != nil {
         return response, fmt.Errorf("failed to parse submit params: %v", err)
     }
 
-    err = pool.receiveWorkFromClient(work, client) // Correct spelling
+    err = pool.receiveWorkFromClient(work, client)
     if err != nil {
         log.Printf("Work submission error from %v: %v", client.ip, err)
         if strings.Contains(err.Error(), "invalid share") {
@@ -220,6 +221,7 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
     if err != nil {
         return fmt.Errorf("failed to fetch work template: %v", err)
     }
+    log.Printf("Generated work from cache for %v: %v", client.ip, currentWork)
 
     if len(submittedWork) < 5 {
         return errors.New("invalid work submission: too few parameters")
@@ -229,6 +231,7 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
     ntime := submittedWork[3]
     nonce := submittedWork[4]
 
+    log.Printf("Client %v submitted jobID: %v, current jobID: %v", client.ip, jobID, currentWork[0])
     if jobID != currentWork[0] {
         return errors.New("invalid share: stale job")
     }
@@ -239,11 +242,11 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
     }
 
     block, _, err := bitcoin.GenerateWork(
-        template, // Already *bitcoin.Template
+        template,
         auxBlocks,
         pool.config.BlockChainOrder[0],
         extranonce2,
-        "", // Placeholder for payout key
+        "",
         0,
     )
     if err != nil {
@@ -262,7 +265,7 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
 
     targetInt := new(big.Int).Mul(
         big.NewInt(int64(pool.config.PoolDifficulty)),
-        big.NewInt(0x100000000), // Rough scaling
+        big.NewInt(0x100000000),
     )
     if hashInt.Cmp(targetInt) > 0 {
         return errors.New("invalid share: below pool difficulty")
@@ -272,7 +275,6 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
     _, err = primaryChain.RPC.SubmitBlock([]interface{}{header})
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
-        // Optional: return fmt.Errorf("primary chain submission failed: %v", err)
     }
 
     for _, chainName := range pool.config.BlockChainOrder[1:] {
@@ -285,7 +287,6 @@ func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *st
                         _, err = auxChain.RPC.SubmitAuxBlock(parts[1], header)
                         if err != nil {
                             log.Printf("Aux chain %v submission failed: %v", chainName, err)
-                            // Optional: return fmt.Errorf("aux chain %v submission failed: %v", chainName, err)
                         }
                     }
                 }
