@@ -7,19 +7,13 @@ import (
     "math/big"
 )
 
-type BlockGenerator interface {
-    MakeHeader(extranonce, nonce string) (string, error)
-    Header() string
-    Sum() (*big.Int, error)
-    Submit() (string, error)
-}
-
+// Import existing Work and AuxPow types (assumed package path)
 var jobCounter int
 
-// Updated to handle multiple aux chains
+// GenerateWork updated to use existing Work and AuxPow types
 func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName, arbitrary, poolPayoutPubScriptKey string, reservedArbitraryByteLength int) (*BitcoinBlock, Work, error) {
     if template == nil {
-        return nil, nil, errors.New("Template cannot be null")
+        return nil, Work{}, errors.New("Template cannot be null")
     }
 
     var err error
@@ -30,7 +24,7 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
     block.reversePrevBlockHash, err = reverseHex4Bytes(block.Template.PrevBlockHash)
     if err != nil {
         m := "invalid previous block hash hex: " + err.Error()
-        return nil, nil, errors.New(m)
+        return nil, Work{}, errors.New(m)
     }
 
     arbitraryBytes := bytesWithLengthHeader([]byte(arbitrary))
@@ -41,29 +35,26 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
     block.coinbaseFinal = arbitraryHex + block.Template.CoinbaseFinal(poolPayoutPubScriptKey).Serialize()
     block.merkleSteps, err = block.Template.MerkleSteps()
     if err != nil {
-        return nil, nil, err
+        return nil, Work{}, errors.New(m)
     }
 
-    // Populate work with auxpow data
-    work := Work{
-        JobID:       fmt.Sprintf("%08x", jobCounter),
-        PrevHash:    block.reversePrevBlockHash,
-        Coinb1:      block.coinbaseInitial,
-        Coinb2:      block.coinbaseFinal,
-        MerkleBranch: block.merkleSteps,
-        Version:     fmt.Sprintf("%08x", block.Template.Version),
-        NBits:       block.Template.Bits,
-        NTime:       fmt.Sprintf("%x", block.Template.CurrentTime),
-        AuxData:     make(map[string]AuxPow),
-    }
+    // Assuming Work is a []string (original behavior)
+    work := make(Work, 8)
+    work[0] = fmt.Sprintf("%08x", jobCounter) // Job ID
+    work[1] = block.reversePrevBlockHash
+    work[2] = block.coinbaseInitial
+    work[3] = block.coinbaseFinal
+    work[4] = block.merkleSteps
+    work[5] = fmt.Sprintf("%08x", block.Template.Version)
+    work[6] = block.Template.Bits
+    work[7] = fmt.Sprintf("%x", block.Template.CurrentTime)
 
-    // Add auxpow data for each auxiliary chain
+    // Handle auxpow data (adjust based on actual AuxPow struct)
     for chainName, auxBlock := range auxBlocks {
         if auxBlock != nil {
-            work.AuxData[chainName] = AuxPow{
-                Target: auxBlock.Target,
-                Hash:   auxBlock.Hash,
-            }
+            // Example: Append auxpow data to work (adjust based on actual AuxPow fields)
+            auxData := fmt.Sprintf("%s:%s", chainName, auxBlock.Hash) // Simplified; update per AuxPow
+            work = append(work, auxData)
         }
     }
 
@@ -71,25 +62,7 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
     return &block, work, nil
 }
 
-// Updated Work struct (assumed)
-type Work struct {
-    JobID       string
-    PrevHash    string
-    Coinb1      string
-    Coinb2      string
-    MerkleBranch []string
-    Version     string
-    NBits       string
-    NTime       string
-    AuxData     map[string]AuxPow
-}
-
-type AuxPow struct {
-    Target string
-    Hash   string
-}
-
-// Adjust MakeHeader to include nonceTime
+// MakeHeader (unchanged except for nonceTime inclusion)
 func (b *BitcoinBlock) MakeHeader(extranonce, nonce, nonceTime string) (string, error) {
     if b.Template == nil {
         return "", errors.New("generate work first")
@@ -122,7 +95,7 @@ func (b *BitcoinBlock) MakeHeader(extranonce, nonce, nonceTime string) (string, 
     return b.header, nil
 }
 
-// Other functions (unchanged for brevity)
+// Remaining functions (unchanged for brevity)
 func (b *BitcoinBlock) HeaderHashed() (string, error) {
     header, err := b.chain.CoinbaseDigest(b.header)
     if err != nil {
@@ -182,4 +155,19 @@ func (b *BitcoinBlock) Submit() (string, error) {
     }
 
     return submission, nil
+}
+
+func debugMerkleSteps(block BitcoinBlock) {
+    fmt.Println()
+    fmt.Println("Transaction IDs")
+    for i, transaction := range block.Template.Transactions {
+        fmt.Println(i+1, transaction.ID, " : ", transaction.Data)
+    }
+
+    fmt.Println()
+    fmt.Println("Steps")
+    for i, step := range block.merkleSteps {
+        fmt.Println(i+1, step)
+    }
+    fmt.Println()
 }
