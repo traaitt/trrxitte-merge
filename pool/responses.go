@@ -214,7 +214,7 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
     return response, nil
 }
 
-func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *stratumClient) error {
+func (pool *PoolServer) receiveWorkFromClient(submittedWork []string, client *stratumClient) error {
     currentWork, err := pool.generateWorkFromCache(false)
     if err != nil {
         return fmt.Errorf("failed to fetch work template: %v", err)
@@ -223,7 +223,6 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
     if len(submittedWork) < 5 {
         return errors.New("invalid work submission: too few parameters")
     }
-    // worker := submittedWork[0]
     jobID := submittedWork[1]
     extranonce2 := submittedWork[2]
     ntime := submittedWork[3]
@@ -269,9 +268,10 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
     }
 
     primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
-    _, err = primaryChain.RPC.SubmitBlock(header) // Use string directly
+    _, err = primaryChain.RPC.SubmitBlock([]interface{}{header})
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
+        // Optional: return fmt.Errorf("primary chain submission failed: %v", err)
     }
 
     for _, chainName := range pool.config.BlockChainOrder[1:] {
@@ -284,6 +284,7 @@ func (pool *PoolServer) recieveWorkFromClient(submittedWork []string, client *st
                         _, err = auxChain.RPC.SubmitAuxBlock(parts[1], header)
                         if err != nil {
                             log.Printf("Aux chain %v submission failed: %v", chainName, err)
+                            // Optional: return fmt.Errorf("aux chain %v submission failed: %v", chainName, err)
                         }
                     }
                 }
