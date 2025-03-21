@@ -5,6 +5,7 @@ import (
     "errors"
     "fmt"
     "math/big"
+    "strings"
 )
 
 type BlockGenerator interface {
@@ -16,7 +17,7 @@ type BlockGenerator interface {
 
 var jobCounter int
 
-// GenerateWork using []string as Work (temporary until actual Work type is provided)
+// GenerateWork using []string as Work
 func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName, arbitrary, poolPayoutPubScriptKey string, reservedArbitraryByteLength int) (*BitcoinBlock, []string, error) {
     if template == nil {
         return nil, []string{}, errors.New("template cannot be null")
@@ -43,18 +44,18 @@ func GenerateWork(template *Template, auxBlocks map[string]*AuxBlock, chainName,
         return nil, []string{}, fmt.Errorf("failed to generate merkle steps: %v", err)
     }
 
-    // Assuming Work is a []string (based on original make(Work, 8))
+    // Assuming Work is a []string
     work := make([]string, 8)
     work[0] = fmt.Sprintf("%08x", jobCounter) // Job ID
     work[1] = block.reversePrevBlockHash
     work[2] = block.coinbaseInitial
     work[3] = block.coinbaseFinal
-    work[4] = block.merkleSteps
+    work[4] = strings.Join(block.merkleSteps, ",") // Convert []string to single string
     work[5] = fmt.Sprintf("%08x", block.Template.Version)
     work[6] = block.Template.Bits
     work[7] = fmt.Sprintf("%x", block.Template.CurrentTime)
 
-    // Append auxpow data as additional strings (adjust based on actual AuxPow struct)
+    // Append auxpow data as additional strings
     for chainName, auxBlock := range auxBlocks {
         if auxBlock != nil {
             auxData := fmt.Sprintf("%s:%s", chainName, auxBlock.Hash)
