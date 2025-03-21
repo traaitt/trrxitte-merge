@@ -1,106 +1,107 @@
 package pool
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"strings"
-	"time"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "log"
+    "math/big"
+    "strings"
+    "time"
 
-	"designs.capital/dogepool/bitcoin"
-	"github.com/google/uuid"
+    "designs.capital/dogepool/bitcoin"
+    "github.com/google/uuid"
 )
 
 type stratumResponse struct {
-	Id      json.RawMessage       `json:"id"`
-	Version string                `json:"jsonrpc,omitempty"`
-	Result  interface{}           `json:"result"`
-	Error   *stratumErrorResponse `json:"error,omitempty"`
+    Id      json.RawMessage       `json:"id"`
+    Version string                `json:"jsonrpc,omitempty"`
+    Result  interface{}           `json:"result"`
+    Error   *stratumErrorResponse `json:"error,omitempty"`
 }
 
 type stratumErrorResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+    Code    int    `json:"code"`
+    Message string `json:"message"`
 }
 
 func (pool *PoolServer) respondToStratumClient(client *stratumClient, requestPayload []byte) error {
-	var request stratumRequest
-	err := json.Unmarshal(requestPayload, &request)
-	if err != nil {
-		markMalformedRequest(client, requestPayload)
-		log.Println("Malformed stratum request from: " + client.ip)
-		return err
-	}
+    var request stratumRequest
+    err := json.Unmarshal(requestPayload, &request)
+    if err != nil {
+        markMalformedRequest(client, requestPayload)
+        log.Println("Malformed stratum request from: " + client.ip)
+        return err
+    }
 
-	timeoutTime := time.Now().Add(pool.connectionTimeout)
-	client.connection.SetDeadline(timeoutTime)
+    timeoutTime := time.Now().Add(pool.connectionTimeout)
+    client.connection.SetDeadline(timeoutTime)
 
-	response, err := handleStratumRequest(&request, client, pool)
-	if err != nil {
-		return err
-	}
+    response, err := handleStratumRequest(&request, client, pool)
+    if err != nil {
+        return err
+    }
 
-	return sendPacket(response, client)
+    return sendPacket(response, client)
 }
 
 func handleStratumRequest(request *stratumRequest, client *stratumClient, pool *PoolServer) (any, error) {
-	switch request.Method {
-	case "mining.subscribe":
-		return miningSubscribe(request, client)
-	case "mining.authorize":
-		return miningAuthorize(request, client, pool)
-	case "mining.extranonce.subscribe":
-		return miningExtranonceSubscribe(request, client)
-	case "mining.submit":
-		return miningSubmit(request, client, pool)
-	case "mining.multi_version":
-		return nil, nil // ignored
-	default:
-		return stratumResponse{}, errors.New("unknown stratum request method: " + request.Method)
-	}
+    switch request.Method {
+    case "mining.subscribe":
+        return miningSubscribe(request, client)
+    case "mining.authorize":
+        return miningAuthorize(request, client, pool)
+    case "mining.extranonce.subscribe":
+        return miningExtranonceSubscribe(request, client)
+    case "mining.submit":
+        return miningSubmit(request, client, pool)
+    case "mining.multi_version":
+        return nil, nil // ignored
+    default:
+        return stratumResponse{}, errors.New("unknown stratum request method: " + request.Method)
+    }
 }
 
 func miningSubscribe(request *stratumRequest, client *stratumClient) (stratumResponse, error) {
-	var response stratumResponse
+    var response stratumResponse
 
-	if isBanned(client.ip) {
-		return response, errors.New("client blocked: " + client.ip)
-	}
+    if isBanned(client.ip) {
+        return response, errors.New("client blocked: " + client.ip)
+    }
 
-	requestParamsJson, err := request.Params.MarshalJSON()
-	if err != nil {
-		return response, err
-	}
+    requestParamsJson, err := request.Params.MarshalJSON()
+    if err != nil {
+        return response, err
+    }
 
-	var requestParams []string
-	json.Unmarshal(requestParamsJson, &requestParams)
-	if len(requestParams) > 0 {
-		clientType := requestParams[0]
-		log.Println("New subscription from client type: " + clientType)
-		client.userAgent = clientType
-	}
+    var requestParams []string
+    json.Unmarshal(requestParamsJson, &requestParams)
+    if len(requestParams) > 0 {
+        clientType := requestParams[0]
+        log.Println("New subscription from client type: " + clientType)
+        client.userAgent = clientType
+    }
 
-	client.sessionID = uuid.NewString()
+    client.sessionID = uuid.NewString()
 
-	var subscriptions []interface{}
-	difficulty := interface{}([]string{"mining.set_difficulty", client.sessionID})
-	notify := interface{}([]string{"mining.notify", client.sessionID})
-	extranonce1 := interface{}(client.extranonce1)
-	extranonce2Length := interface{}(4)
+    var subscriptions []interface{}
+    difficulty := interface{}([]string{"mining.set_difficulty", client.sessionID})
+    notify := interface{}([]string{"mining.notify", client.sessionID})
+    extranonce1 := interface{}(client.extranonce1)
+    extranonce2Length := interface{}(4)
 
-	subscriptions = append(subscriptions, difficulty)
-	subscriptions = append(subscriptions, notify)
+    subscriptions = append(subscriptions, difficulty)
+    subscriptions = append(subscriptions, notify)
 
-	var responseResult []interface{}
-	responseResult = append(responseResult, subscriptions)
-	responseResult = append(responseResult, extranonce1)
-	responseResult = append(responseResult, extranonce2Length)
+    var responseResult []interface{}
+    responseResult = append(responseResult, subscriptions)
+    responseResult = append(responseResult, extranonce1)
+    responseResult = append(responseResult, extranonce2Length)
 
-	response.Id = request.Id
-	response.Result = responseResult
+    response.Id = request.Id
+    response.Result = responseResult
 
-	return response, nil
+    return response, nil
 }
 
 func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolServer) (any, error) {
@@ -111,7 +112,7 @@ func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolS
     }
 
     var params []string
-    err := json.Unmarshal(request.Params, &params)
+    err := json.Unmarshal(request.Params, ¶ms)
     if err != nil {
         return reply, err
     }
@@ -138,7 +139,6 @@ func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolS
 
     rigID := loginParts[1]
 
-    // Validate each address against its blockchain
     blockchainIndex := 0
     for _, blockChainName := range pool.config.BlockChainOrder {
         blockChain := bitcoin.GetChain(blockChainName)
@@ -162,13 +162,12 @@ func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolS
 
     authResponse.Result = interface{}(true)
 
-    // Send three packets as part of authorization
-    err = sendPacket(authResponse, client) // 1. Authorization response
+    err = sendPacket(authResponse, client)
     if err != nil {
         return reply, err
     }
 
-    err = sendPacket(miningSetDifficulty(pool.config.PoolDifficulty), client) // 2. Set difficulty
+    err = sendPacket(miningSetDifficulty(pool.config.PoolDifficulty), client)
     if err != nil {
         return reply, err
     }
@@ -178,18 +177,14 @@ func miningAuthorize(request *stratumRequest, client *stratumClient, pool *PoolS
         return reply, err
     }
 
-    reply = miningNotify(work) // 3. Initial work notification
-
+    reply = miningNotify(work)
     return reply, nil
 }
 
 func miningExtranonceSubscribe(request *stratumRequest, client *stratumClient) (stratumResponse, error) {
-    response := stratumResponse{
-        Id:     request.Id,
-        Result: interface{}(true), // Accept extranonce subscription
-    }
-
-    // No additional action needed unless pool dynamically adjusts extranonce
+    var response stratumResponse
+    response.Id = request.Id
+    response.Result = interface{}(true)
     log.Println("Client subscribed to extranonce updates: " + client.ip)
     return response, nil
 }
@@ -200,7 +195,7 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
         Id:     request.Id,
     }
 
-    var work bitcoin.Work
+    var work []string // bitcoin.Work is []string
     err := json.Unmarshal(request.Params, &work)
     if err != nil {
         return response, fmt.Errorf("failed to parse submit params: %v", err)
@@ -209,7 +204,6 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
     err = pool.recieveWorkFromClient(work, client)
     if err != nil {
         log.Printf("Work submission error from %v: %v", client.ip, err)
-        // Return true unless it's a critical error (per Stratum spec)
         if strings.Contains(err.Error(), "invalid share") {
             return response, nil // Invalid share but not a protocol error
         }
@@ -220,14 +214,37 @@ func miningSubmit(request *stratumRequest, client *stratumClient, pool *PoolServ
     return response, nil
 }
 
-func (pool *PoolServer) recieveWorkFromClient(work bitcoin.Work, client *stratumClient) error {
-    // Generate block header from submitted work
-    block, _, err := bitcoin.GenerateWork(pool.cachedTemplate, pool.cachedAuxBlocks, pool.config.BlockChainOrder[0], "", pool.config.PoolPayoutPubScriptKey, 0)
+func (pool *PoolServer) recieveWorkFromClient(work []string, client *stratumClient) error {
+    // Fetch current work template and aux blocks (replace cached fields)
+    templateWork, err := pool.generateWorkFromCache(false)
+    if err != nil {
+        return fmt.Errorf("failed to fetch work template: %v", err)
+    }
+
+    // Extract submitted values (assuming Stratum submit format: [worker, jobID, extranonce2, ntime, nonce])
+    if len(work) < 5 {
+        return errors.New("invalid work submission: too few parameters")
+    }
+    // worker := work[0] // Not used here
+    jobID := work[1]
+    extranonce2 := work[2]
+    ntime := work[3]
+    nonce := work[4]
+
+    // Regenerate block with submitted data
+    block, _, err := bitcoin.GenerateWork(
+        pool.activeNodes[pool.config.BlockChainOrder[0]].Template, // Primary chain template
+        pool.activeNodes[pool.config.BlockChainOrder[0]].AuxBlocks, // Adjust if aux blocks are stored differently
+        pool.config.BlockChainOrder[0],
+        extranonce2, // Use extranonce2 as arbitrary
+        "",          // Placeholder for PoolPayoutPubScriptKey (adjust as needed)
+        0,
+    )
     if err != nil {
         return fmt.Errorf("failed to regenerate work: %v", err)
     }
 
-    header, err := block.MakeHeader(work.Extranonce, work.Nonce, work.NTime)
+    header, err := block.MakeHeader(extranonce2, nonce, ntime)
     if err != nil {
         return fmt.Errorf("failed to make header: %v", err)
     }
@@ -238,30 +255,34 @@ func (pool *PoolServer) recieveWorkFromClient(work bitcoin.Work, client *stratum
         return fmt.Errorf("failed to hash header: %v", err)
     }
 
-    targetInt := big.NewInt(0).SetFloat64(pool.config.PoolDifficulty)
+    targetInt, ok := big.NewInt(0).SetString(pool.config.PoolDifficulty, 10)
+    if !ok {
+        targetInt = big.NewInt(1) // Default fallback
+    }
     if hashInt.Cmp(targetInt) > 0 {
         return errors.New("invalid share: below pool difficulty")
     }
 
-    // Submit to primary chain (Dogecoin)
+    // Submit to primary chain
     primaryChain := pool.activeNodes[pool.config.BlockChainOrder[0]]
-    _, err = primaryChain.RPC.SubmitBlock(header)
+    _, err = primaryChain.RPC.SubmitBlock([]string{header}) // Adjust based on RPC method signature
     if err != nil {
         log.Printf("Primary chain submission failed: %v", err)
     }
 
     // Submit auxpow to auxiliary chains
     for _, chainName := range pool.config.BlockChainOrder[1:] {
-        auxData, ok := work.AuxData[chainName]
-        if !ok || auxData.Target == "" {
-            log.Printf("Missing aux data for %v", chainName)
-            continue
-        }
-
-        auxChain := pool.activeNodes[chainName]
-        _, err = auxChain.RPC.SubmitAuxBlock(auxData.Hash, header)
-        if err != nil {
-            log.Printf("Aux chain %v submission failed: %v", chainName, err)
+        if len(templateWork) > 8 { // Check for aux data
+            for _, auxEntry := range templateWork[8:] {
+                parts := strings.SplitN(auxEntry, ":", 2)
+                if len(parts) == 2 && parts[0] == chainName {
+                    auxChain := pool.activeNodes[chainName]
+                    _, err = auxChain.RPC.SubmitAuxBlock(parts[1], header)
+                    if err != nil {
+                        log.Printf("Aux chain %v submission failed: %v", chainName, err)
+                    }
+                }
+            }
         }
     }
 
